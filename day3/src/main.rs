@@ -57,17 +57,32 @@ impl Map {
 fn main() {
     let input = get_input();
     let map = Map::parse(&input);
-    let slope = (3, 1);
     println!(
         "\nParsed map of size ({}, {}).",
         map.pattern_width, map.height,
     );
+
+    let slope_part1 = (3, 1);
     println!(
         "Part One: found {} trees on slope ({}, {}).",
-        map.count_tile_on_trajectory(Tile::Tree, slope),
-        slope.0,
-        slope.1
+        map.count_tile_on_trajectory(Tile::Tree, slope_part1),
+        slope_part1.0,
+        slope_part1.1
     );
+
+    println!("\nPart Two:");
+    let slopes_part2 = vec![(1, 1), (3, 1), (5, 1), (7, 1), (1, 2)];
+    let tree_counts = slopes_part2
+        .iter()
+        .map(|&slope| map.count_tile_on_trajectory(Tile::Tree, slope));
+    for (trees, slope) in tree_counts.clone().zip(&slopes_part2) {
+        println!("Found {} trees on slope ({}, {}).", trees, slope.0, slope.1);
+    }
+
+    println!(
+        "Product of all trees found = {}.",
+        tree_counts.fold(1, |acc, el| acc * el)
+    )
 }
 
 pub fn get_input() -> Vec<&'static str> {
