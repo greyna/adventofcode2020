@@ -24,16 +24,13 @@ struct Map {
 
 impl Map {
     fn parse(input: &[&str]) -> Self {
-        let height = input.len();
-        let pattern_width = input[0].len();
-        let pattern = input
-            .iter()
-            .map(|line| line.chars().map(Tile::parse).collect())
-            .collect();
         Map {
-            pattern,
-            height,
-            pattern_width,
+            pattern: input
+                .iter()
+                .map(|line| line.chars().map(Tile::parse).collect())
+                .collect(),
+            height: input.len(),
+            pattern_width: input[0].len(),
         }
     }
 
@@ -64,7 +61,7 @@ fn main() {
 
     let slope_part1 = (3, 1);
     println!(
-        "Part One: found {} trees on slope ({}, {}).",
+        "\nPart One: found {} trees on slope ({}, {}).",
         map.count_tile_on_trajectory(Tile::Tree, slope_part1),
         slope_part1.0,
         slope_part1.1
