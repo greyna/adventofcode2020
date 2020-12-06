@@ -78,7 +78,7 @@ fn main() {
 
     println!(
         "Product of all trees found = {}.",
-        tree_counts.fold(1, |acc, el| acc * el)
+        tree_counts.product::<usize>()
     )
 }
 
