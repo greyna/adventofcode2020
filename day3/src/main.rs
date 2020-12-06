@@ -1,6 +1,6 @@
 use std::vec;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 enum Tile {
     Open,
     Tree,
@@ -14,23 +14,60 @@ impl Tile {
             _ => panic!("Unknown terrain"),
         }
     }
-
-    fn is_tree(&self) -> bool {
-        *self == Tile::Tree
-    }
 }
 
 struct Map {
-    // double vector of Tile for 2D pattern
+    pattern: Vec<Vec<Tile>>, // stored as [y][x] for coordinates (x, y)
+    height: usize,
+    pattern_width: usize,
 }
 
 impl Map {
-    // logic for infinite wrapping on x-axis
-    // counting type of tile given a 2D slope
+    fn parse(input: &[&str]) -> Self {
+        let height = input.len();
+        let pattern_width = input[0].len();
+        let pattern = input
+            .iter()
+            .map(|line| line.chars().map(Tile::parse).collect())
+            .collect();
+        Map {
+            pattern,
+            height,
+            pattern_width,
+        }
+    }
+
+    fn get_tile(&self, coord: (usize, usize)) -> Tile {
+        // pattern is stored as [y][x] for coordinates (x, y)
+        // infinite wrapping on x-axis
+        self.pattern[coord.1][coord.0 % self.pattern_width]
+    }
+
+    fn count_tile_on_trajectory(&self, tile_type: Tile, slope: (usize, usize)) -> usize {
+        (0..)
+            .step_by(slope.0)
+            .zip((0..).step_by(slope.1))
+            .take_while(|(_, y)| *y < self.height)
+            .map(|coord| self.get_tile(coord))
+            .filter(|&tile| tile == tile_type)
+            .count()
+    }
 }
 
 fn main() {
-    println!("Hello day3!");
+    let input = get_input();
+    let map = Map::parse(&input);
+    let slope = (3, 1);
+    println!(
+        "\nParsed map of size ({}, {}).",
+        map.pattern_width, map.height,
+    );
+    println!(
+        "Part One: found {} trees on slope ({}, {}).",
+        map.count_tile_on_trajectory(Tile::Tree, slope),
+        slope.0,
+        slope.1
+    );
 }
 
 pub fn get_input() -> Vec<&'static str> {
