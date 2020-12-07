@@ -44,7 +44,7 @@ impl Map {
         (0..)
             .step_by(slope.0)
             .zip((0..).step_by(slope.1))
-            .take_while(|(_, y)| *y < self.height)
+            .take_while(|&(_, y)| y < self.height)
             .map(|coord| self.get_tile(coord))
             .filter(|&tile| tile == tile_type)
             .count()

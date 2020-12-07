@@ -50,8 +50,8 @@ impl<'a> Password<'a> {
         self.password
             .chars()
             .enumerate()
-            .filter(|(i, c)| {
-                (i + 1 == self.first_nb || i + 1 == self.second_nb) && *c == self.searched
+            .filter(|&(i, c)| {
+                (i + 1 == self.first_nb || i + 1 == self.second_nb) && c == self.searched
             })
             .count()
             == 1
