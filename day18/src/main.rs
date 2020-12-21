@@ -104,7 +104,9 @@ impl Evaluator for Expression {
                     }));
                 } else {
                     operators.push(op);
-                    operands.push(self.operands[i + 1].clone());
+                    operands.push(Box::new(Value {
+                        value: self.operands[i + 1].evaluate2(),
+                    }));
                 }
             }
 
