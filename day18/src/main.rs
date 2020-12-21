@@ -20,12 +20,32 @@ fn parse_operator(input: &str) -> Option<Operator> {
         _ => None,
     }
 }
-pub trait Evaluator {
+pub trait Evaluator: CloneEvaluator {
     fn evaluate1(&self) -> u64;
     fn evaluate2(&self) -> u64;
     fn display(&self) -> String;
 }
 
+pub trait CloneEvaluator {
+    fn clone_evaluator(&self) -> Box<dyn Evaluator>;
+}
+
+impl<T> CloneEvaluator for T
+where
+    T: Evaluator + Clone + 'static,
+{
+    fn clone_evaluator(&self) -> Box<dyn Evaluator> {
+        Box::new(self.clone())
+    }
+}
+
+impl Clone for Box<dyn Evaluator> {
+    fn clone(&self) -> Self {
+        self.clone_evaluator()
+    }
+}
+
+#[derive(Clone, Copy)]
 struct Value {
     value: u64,
 }
@@ -44,6 +64,7 @@ impl Evaluator for Value {
     }
 }
 
+#[derive(Clone)]
 pub struct Expression {
     operators: Vec<Operator>,
     operands: Vec<Box<dyn Evaluator>>,
@@ -71,12 +92,27 @@ impl Evaluator for Expression {
         if self.operators.is_empty() {
             self.operands[0].evaluate2()
         } else {
-            self.operators
-                .iter()
-                .enumerate()
-                .fold(self.operands[0].evaluate2(), |acc, (i, f)| {
-                    f(acc, self.operands[i + 1].evaluate2())
-                })
+            // remove all additions then use evaluate1
+            let mut operators = vec![];
+            let mut operands = vec![self.operands[0].clone()];
+
+            for (i, &op) in self.operators.iter().enumerate() {
+                if op == ADD {
+                    let operand = operands.pop().unwrap();
+                    operands.push(Box::new(Value {
+                        value: operand.evaluate2() + self.operands[i + 1].evaluate2(),
+                    }));
+                } else {
+                    operators.push(op);
+                    operands.push(self.operands[i + 1].clone());
+                }
+            }
+
+            Self {
+                operators,
+                operands,
+            }
+            .evaluate1()
         }
     }
 
@@ -183,35 +219,33 @@ impl Expression {
                 } else {
                     break; // encountered end of bracket to parse
                 }
+            } else if let Some(operator) =
+                parse_operator(if rest.len() >= 3 { &rest[..3] } else { rest })
+            {
+                // if previous iteration closed a bracket, we'll have an operator to handle
+                operators.push(operator);
+                rest = &rest[3..];
             } else {
-                if let Some(operator) =
-                    parse_operator(if rest.len() >= 3 { &rest[..3] } else { rest })
-                {
-                    // if previous iteration closed a bracket, we'll have an operator to handle
-                    operators.push(operator);
-                    rest = &rest[3..];
+                if bracket_is_open {
+                    // We always have an operator before an opening bracket
+                    // (otherwise it's the start of the line which is verified by bracket_index == 0 above)
+                    let input_before_operator = &rest[..bracket_index - 3];
+                    Self::parse_part_without_bracket(
+                        input_before_operator,
+                        &mut operators,
+                        &mut operands,
+                    );
+                    let operator_before_bracket = &rest[bracket_index - 3..bracket_index];
+                    operators.push(parse_operator(operator_before_bracket).unwrap());
                 } else {
-                    if bracket_is_open {
-                        // We always have an operator before an opening bracket
-                        // (otherwise it's the start of the line which is verified by bracket_index == 0 above)
-                        let input_before_operator = &rest[..bracket_index - 3];
-                        Self::parse_part_without_bracket(
-                            input_before_operator,
-                            &mut operators,
-                            &mut operands,
-                        );
-                        let operator_before_bracket = &rest[bracket_index - 3..bracket_index];
-                        operators.push(parse_operator(operator_before_bracket).unwrap());
-                    } else {
-                        Self::parse_part_without_bracket(
-                            &rest[..bracket_index],
-                            &mut operators,
-                            &mut operands,
-                        );
-                    }
-
-                    rest = &rest[bracket_index..];
+                    Self::parse_part_without_bracket(
+                        &rest[..bracket_index],
+                        &mut operators,
+                        &mut operands,
+                    );
                 }
+
+                rest = &rest[bracket_index..];
             }
         }
 
