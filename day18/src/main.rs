@@ -1,5 +1,7 @@
 use std::cmp::min;
 
+type Operator = fn(u64, u64) -> u64;
+
 fn add(a: u64, b: u64) -> u64 {
     a + b
 }
@@ -8,7 +10,10 @@ fn multiply(a: u64, b: u64) -> u64 {
     a * b
 }
 
-fn parse_operator(input: &str) -> Option<fn(u64, u64) -> u64> {
+const ADD: Operator = add;
+const MULTIPLY: Operator = multiply;
+
+fn parse_operator(input: &str) -> Option<Operator> {
     match input.trim() {
         "+" => Some(add),
         "*" => Some(multiply),
@@ -17,6 +22,7 @@ fn parse_operator(input: &str) -> Option<fn(u64, u64) -> u64> {
 }
 pub trait Evaluator {
     fn evaluate(&self) -> u64;
+    fn display(&self) -> String;
 }
 
 struct Value {
@@ -27,10 +33,14 @@ impl Evaluator for Value {
     fn evaluate(&self) -> u64 {
         self.value
     }
+
+    fn display(&self) -> String {
+        self.value.to_string()
+    }
 }
 
 pub struct Expression {
-    operators: Vec<fn(u64, u64) -> u64>,
+    operators: Vec<Operator>,
     operands: Vec<Box<dyn Evaluator>>,
 }
 
@@ -49,6 +59,32 @@ impl Evaluator for Expression {
                 })
         }
     }
+
+    fn display(&self) -> String {
+        assert!(self.is_valid());
+        format!(
+            "({})",
+            if self.operators.is_empty() {
+                self.operands[0].display()
+            } else {
+                self.operators.iter().enumerate().fold(
+                    self.operands[0].display(),
+                    |acc, (i, &f)| {
+                        format!(
+                            "{}{}{}",
+                            acc,
+                            match f {
+                                ADD => " + ",
+                                MULTIPLY => " * ",
+                                _ => panic!("unsupported"),
+                            },
+                            self.operands[i + 1].display()
+                        )
+                    },
+                )
+            }
+        )
+    }
 }
 
 impl Expression {
@@ -56,63 +92,10 @@ impl Expression {
         self.operators.len() + 1 == self.operands.len()
     }
 
-    pub fn parse(input: &str) -> Self {
+    pub fn parse_without_bracket(input: &str) -> Expression {
         let mut operators = vec![];
-        let mut operands: Vec<Box<dyn Evaluator>> = vec![];
-
-        let mut rest: &str = input;
-
-        // we analyse only until the next bracket at each iteration of this loop
-        while !rest.is_empty() {
-            let bracket_open = rest.find('(');
-            let bracket_close = rest.find(')');
-
-            if bracket_open.is_none() && bracket_close.is_none() {
-                // no more brackets, end of loop
-                if let Some(operator) = parse_operator(&rest[..3]) {
-                    // if previous iteration closed a bracket, we'll have an operator to handle
-                    operators.push(operator);
-                    rest = &rest[3..];
-                }
-                operands.push(Box::new(build_simple_expression(rest)));
-                break;
-            } else {
-                let mut bracket_index = min(
-                    bracket_open.unwrap_or(usize::MAX),
-                    bracket_close.unwrap_or(usize::MAX),
-                );
-                if bracket_index == 0 {
-                    rest = &rest[1..];
-                    continue;
-                }
-                let bracket_is_open = bracket_open.map_or(false, |i| i == bracket_index);
-
-                if let Some(operator) = parse_operator(&rest[..3]) {
-                    // if previous iteration closed a bracket, we'll have an operator to handle
-                    operators.push(operator);
-                    rest = &rest[3..];
-                    bracket_index -= 3;
-                }
-                if bracket_index == 0 {
-                    rest = &rest[1..];
-                    continue;
-                }
-
-                if bracket_is_open {
-                    // We always have an operator before an opening bracket
-                    // (otherwise it's the start of the line which is verified by bracket_index == 0 above)
-                    let input_before_operator = &rest[..bracket_index - 3];
-                    operands.push(Box::new(build_simple_expression(input_before_operator)));
-                    let operator_before_bracket = &rest[bracket_index - 3..bracket_index];
-                    operators.push(parse_operator(operator_before_bracket).unwrap());
-                } else {
-                    let input_before_bracket = &rest[..bracket_index];
-                    operands.push(Box::new(build_simple_expression(input_before_bracket)));
-                }
-
-                rest = &rest[bracket_index + 1..];
-            }
-        }
+        let mut operands = vec![];
+        Self::parse_part_without_bracket(input, &mut operators, &mut operands);
 
         let e = Expression {
             operators,
@@ -121,62 +104,145 @@ impl Expression {
         assert!(e.is_valid());
         e
     }
+
+    fn parse_part_without_bracket(
+        input: &str,
+        operators: &mut Vec<Operator>,
+        operands: &mut Vec<Box<dyn Evaluator>>,
+    ) {
+        assert!(!input.contains('(') && !input.contains(')'));
+        let split = input.trim().split(' ');
+        let split2 = split.clone();
+
+        operators.extend(
+            split
+                .filter(|&s| s == "+" || s == "*")
+                .map(|s| parse_operator(s).unwrap()),
+        );
+        operands.extend(
+            split2
+                .filter(|&s| s != "+" && s != "*")
+                .map(|s| -> Box<dyn Evaluator> {
+                    Box::new(Value {
+                        value: s.parse().unwrap(),
+                    })
+                }),
+        );
+    }
+
+    pub fn parse(input: &str) -> Self {
+        let (res, _) = Self::parse_bracket_content([input, ")"].join("").as_str());
+        res
+    }
+
+    // input is the full string from just after the opening bracket
+    // the rest after after the corresponding closing bracket will be the second output
+    fn parse_bracket_content(input: &str) -> (Self, /*rest:*/ &str) {
+        let mut operators = vec![];
+        let mut operands: Vec<Box<dyn Evaluator>> = vec![];
+
+        let mut rest: &str = input;
+
+        while !rest.is_empty() {
+            let bracket_open = rest.find('(');
+            let bracket_close = rest.find(')');
+
+            assert!(bracket_close.is_some());
+
+            let bracket_index = min(
+                bracket_open.unwrap_or(usize::MAX),
+                bracket_close.unwrap_or(usize::MAX),
+            );
+            let bracket_is_open = bracket_open.map_or(false, |i| i == bracket_index);
+
+            if bracket_index == 0 {
+                rest = &rest[1..];
+
+                if bracket_is_open {
+                    let (e, new_rest) = Self::parse_bracket_content(rest);
+                    operands.push(Box::new(e));
+                    rest = new_rest;
+                } else {
+                    break; // encountered end of bracket to parse
+                }
+            } else {
+                if let Some(operator) =
+                    parse_operator(if rest.len() >= 3 { &rest[..3] } else { rest })
+                {
+                    // if previous iteration closed a bracket, we'll have an operator to handle
+                    operators.push(operator);
+                    rest = &rest[3..];
+                } else {
+                    if bracket_is_open {
+                        // We always have an operator before an opening bracket
+                        // (otherwise it's the start of the line which is verified by bracket_index == 0 above)
+                        let input_before_operator = &rest[..bracket_index - 3];
+                        Self::parse_part_without_bracket(
+                            input_before_operator,
+                            &mut operators,
+                            &mut operands,
+                        );
+                        //operands.push(Box::new(Self::parse_without_bracket(input_before_operator)));
+                        let operator_before_bracket = &rest[bracket_index - 3..bracket_index];
+                        operators.push(parse_operator(operator_before_bracket).unwrap());
+                    } else {
+                        Self::parse_part_without_bracket(
+                            &rest[..bracket_index],
+                            &mut operators,
+                            &mut operands,
+                        );
+                        //operands.push(Box::new(Self::parse_without_bracket(input_before_bracket)));
+                    }
+
+                    rest = &rest[bracket_index..];
+                }
+            }
+        }
+
+        let e = Self {
+            operators,
+            operands,
+        };
+        assert!(e.is_valid());
+        (e, rest)
+    }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-fn build_simple_expression(input: &str) -> Expression {
-    assert!(!input.contains('(') && !input.contains(')'));
-    let split = input.trim().split(' ');
-    let split2 = split.clone();
-    let e = Expression {
-        operators: split
-            .filter(|&s| s == "+" || s == "*")
-            .map(|s| parse_operator(s).unwrap())
-            .collect(),
-        operands: split2
-            .filter(|&s| s != "+" && s != "*")
-            .map(|s| -> Box<dyn Evaluator> {
-                Box::new(Value {
-                    value: s.parse().unwrap(),
-                })
-            })
-            .collect(),
-    };
-    assert!(e.is_valid());
-    e
-}
+    #[test]
+    fn test_without_bracket() {
+        let input = "1 + 2 * 3 + 4 * 5 + 6";
+        let sol = 71_u64;
 
-#[test]
-fn test_simple_expression() {
-    let input = "1 + 2 * 3 + 4 * 5 + 6";
-    let sol = 71_u64;
+        let exp = Expression::parse_without_bracket(input);
+        assert_eq!(exp.evaluate(), sol);
+    }
 
-    let exp = build_simple_expression(input);
-    assert_eq!(exp.evaluate(), sol);
-}
-#[test]
-fn test_compound_expression2() {
-    let input = "(1 + 1)";
-    let sol = 2_u64;
+    fn test_expr(input: &str, sol: u64) {
+        let exp = Expression::parse(input);
+        println!("{}", exp.display());
+        assert_eq!(exp.evaluate(), sol);
+    }
 
-    let exp = Expression::parse(input);
-    assert_eq!(exp.evaluate(), sol);
-}
+    #[test]
+    fn simple_tests() {
+        test_expr("(1 + 1)", 2);
+        test_expr("(1 + 1) + 1", 3);
+        test_expr("(1 + (1 + (1 + 1)) + 1) + 1", 6);
+        test_expr("(2 + 1) + 1 * 4", 16);
+    }
 
-#[test]
-fn test_compound_expression3() {
-    let input = "(1 + 1) + 1";
-    let sol = 3_u64;
-
-    let exp = Expression::parse(input);
-    assert_eq!(exp.evaluate(), sol);
-}
-#[test]
-fn test_compound_expression6() {
-    let input = "(1 + (1 + (1 + 1)) + 1) + 1";
-    let sol = 6_u64;
-
-    let exp = Expression::parse(input);
-    assert_eq!(exp.evaluate(), sol);
+    #[test]
+    fn official_part1_tests() {
+        test_expr("1 + 2 * 3 + 4 * 5 + 6", 71);
+        test_expr("1 + (2 * 3) + (4 * (5 + 6))", 51);
+        test_expr("2 * 3 + (4 * 5)", 26);
+        test_expr("5 + (8 * 3 + 9 + 3 * 4 * 3)", 437);
+        test_expr("5 * 9 * (7 * 3 * 3 + 9 * 3 + (8 + 6 * 4))", 12240);
+        test_expr("((2 + 4 * 9) * (6 + 9 * 8 + 6) + 6) + 2 + 4 * 2", 13632);
+    }
 }
 
 fn main() {
