@@ -21,7 +21,8 @@ fn parse_operator(input: &str) -> Option<Operator> {
     }
 }
 pub trait Evaluator {
-    fn evaluate(&self) -> u64;
+    fn evaluate1(&self) -> u64;
+    fn evaluate2(&self) -> u64;
     fn display(&self) -> String;
 }
 
@@ -30,7 +31,11 @@ struct Value {
 }
 
 impl Evaluator for Value {
-    fn evaluate(&self) -> u64 {
+    fn evaluate1(&self) -> u64 {
+        self.value
+    }
+
+    fn evaluate2(&self) -> u64 {
         self.value
     }
 
@@ -45,17 +50,32 @@ pub struct Expression {
 }
 
 impl Evaluator for Expression {
-    fn evaluate(&self) -> u64 {
+    fn evaluate1(&self) -> u64 {
         assert!(self.is_valid());
 
         if self.operators.is_empty() {
-            self.operands[0].evaluate()
+            self.operands[0].evaluate1()
         } else {
             self.operators
                 .iter()
                 .enumerate()
-                .fold(self.operands[0].evaluate(), |acc, (i, f)| {
-                    f(acc, self.operands[i + 1].evaluate())
+                .fold(self.operands[0].evaluate1(), |acc, (i, f)| {
+                    f(acc, self.operands[i + 1].evaluate1())
+                })
+        }
+    }
+
+    fn evaluate2(&self) -> u64 {
+        assert!(self.is_valid());
+
+        if self.operators.is_empty() {
+            self.operands[0].evaluate2()
+        } else {
+            self.operators
+                .iter()
+                .enumerate()
+                .fold(self.operands[0].evaluate2(), |acc, (i, f)| {
+                    f(acc, self.operands[i + 1].evaluate2())
                 })
         }
     }
@@ -209,40 +229,46 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_without_bracket() {
+    fn test_without_bracket_part1() {
         let input = "1 + 2 * 3 + 4 * 5 + 6";
         let sol = 71_u64;
 
         let exp = Expression::parse_without_bracket(input);
-        assert_eq!(exp.evaluate(), sol);
+        assert_eq!(exp.evaluate1(), sol);
     }
 
-    fn test_expr(input: &str, sol: u64) {
+    fn test_expr_part1(input: &str, sol: u64) {
         let exp = Expression::parse(input);
         println!("{}", exp.display());
-        assert_eq!(exp.evaluate(), sol);
+        assert_eq!(exp.evaluate1(), sol);
     }
 
-    macro_rules! expr_tests {
+    fn test_expr_part2(input: &str, sol: u64) {
+        let exp = Expression::parse(input);
+        println!("{}", exp.display());
+        assert_eq!(exp.evaluate2(), sol);
+    }
+
+    macro_rules! expr_tests_part1 {
         ($($name:ident: $value:expr,)*) => {
         $(
             #[test]
             fn $name() {
                 let (input, expected) = $value;
-                test_expr(input, expected);
+                test_expr_part1(input, expected);
             }
         )*
         }
     }
 
-    expr_tests! {
+    expr_tests_part1! {
         simple1: ("(1 + 1)", 2),
         simple2: ("(1 + 1) + 1", 3),
         simple3: ("(1 + (1 + (1 + 1)) + 1) + 1", 6),
         simple4: ("(2 + 1) + 1 * 4", 16),
     }
 
-    expr_tests! {
+    expr_tests_part1! {
         official1_1: ("1 + 2 * 3 + 4 * 5 + 6", 71),
         official1_2: ("1 + (2 * 3) + (4 * (5 + 6))", 51),
         official1_3: ("2 * 3 + (4 * 5)", 26),
@@ -251,7 +277,19 @@ mod tests {
         official1_6: ("((2 + 4 * 9) * (6 + 9 * 8 + 6) + 6) + 2 + 4 * 2", 13632),
     }
 
-    expr_tests! {
+    macro_rules! expr_tests_part2 {
+        ($($name:ident: $value:expr,)*) => {
+        $(
+            #[test]
+            fn $name() {
+                let (input, expected) = $value;
+                test_expr_part2(input, expected);
+            }
+        )*
+        }
+    }
+
+    expr_tests_part2! {
         official2_1: ("1 + 2 * 3 + 4 * 5 + 6", 231),
         official2_2: ("1 + (2 * 3) + (4 * (5 + 6))", 51),
         official2_3: ("2 * 3 + (4 * 5)", 46),
@@ -264,11 +302,14 @@ mod tests {
 fn main() {
     let input = get_input();
     let exps = input.iter().map(|&s| Expression::parse(s));
-    for (&str, exp) in input.iter().zip(exps.clone()) {
-        println!("{}   =   {}", exp.evaluate(), str);
-    }
-    let sum: u64 = exps.map(|e| e.evaluate()).sum();
-    println!("sum is {}", sum);
+    // for (&str, exp) in input.iter().zip(exps.clone()) {
+    //     println!("Part 1: {}  =  {}", exp.evaluate1(), str);
+    // }
+    let sum1: u64 = exps.clone().map(|e| e.evaluate1()).sum();
+    println!("Part 1: sum is {} .", sum1);
+
+    let sum2: u64 = exps.map(|e| e.evaluate2()).sum();
+    println!("Part 2: sum is {} .", sum2);
 }
 
 pub fn get_input() -> Vec<&'static str> {
