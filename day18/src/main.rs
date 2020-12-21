@@ -97,12 +97,10 @@ impl Expression {
         let mut operands = vec![];
         Self::parse_part_without_bracket(input, &mut operators, &mut operands);
 
-        let e = Expression {
+        Expression {
             operators,
             operands,
-        };
-        assert!(e.is_valid());
-        e
+        }
     }
 
     fn parse_part_without_bracket(
@@ -182,7 +180,6 @@ impl Expression {
                             &mut operators,
                             &mut operands,
                         );
-                        //operands.push(Box::new(Self::parse_without_bracket(input_before_operator)));
                         let operator_before_bracket = &rest[bracket_index - 3..bracket_index];
                         operators.push(parse_operator(operator_before_bracket).unwrap());
                     } else {
@@ -191,7 +188,6 @@ impl Expression {
                             &mut operators,
                             &mut operands,
                         );
-                        //operands.push(Box::new(Self::parse_without_bracket(input_before_bracket)));
                     }
 
                     rest = &rest[bracket_index..];
@@ -199,12 +195,13 @@ impl Expression {
             }
         }
 
-        let e = Self {
-            operators,
-            operands,
-        };
-        assert!(e.is_valid());
-        (e, rest)
+        (
+            Self {
+                operators,
+                operands,
+            },
+            rest,
+        )
     }
 }
 #[cfg(test)]
@@ -226,22 +223,41 @@ mod tests {
         assert_eq!(exp.evaluate(), sol);
     }
 
-    #[test]
-    fn simple_tests() {
-        test_expr("(1 + 1)", 2);
-        test_expr("(1 + 1) + 1", 3);
-        test_expr("(1 + (1 + (1 + 1)) + 1) + 1", 6);
-        test_expr("(2 + 1) + 1 * 4", 16);
+    macro_rules! expr_tests {
+        ($($name:ident: $value:expr,)*) => {
+        $(
+            #[test]
+            fn $name() {
+                let (input, expected) = $value;
+                test_expr(input, expected);
+            }
+        )*
+        }
     }
 
-    #[test]
-    fn official_part1_tests() {
-        test_expr("1 + 2 * 3 + 4 * 5 + 6", 71);
-        test_expr("1 + (2 * 3) + (4 * (5 + 6))", 51);
-        test_expr("2 * 3 + (4 * 5)", 26);
-        test_expr("5 + (8 * 3 + 9 + 3 * 4 * 3)", 437);
-        test_expr("5 * 9 * (7 * 3 * 3 + 9 * 3 + (8 + 6 * 4))", 12240);
-        test_expr("((2 + 4 * 9) * (6 + 9 * 8 + 6) + 6) + 2 + 4 * 2", 13632);
+    expr_tests! {
+        simple1: ("(1 + 1)", 2),
+        simple2: ("(1 + 1) + 1", 3),
+        simple3: ("(1 + (1 + (1 + 1)) + 1) + 1", 6),
+        simple4: ("(2 + 1) + 1 * 4", 16),
+    }
+
+    expr_tests! {
+        official1_1: ("1 + 2 * 3 + 4 * 5 + 6", 71),
+        official1_2: ("1 + (2 * 3) + (4 * (5 + 6))", 51),
+        official1_3: ("2 * 3 + (4 * 5)", 26),
+        official1_4: ("5 + (8 * 3 + 9 + 3 * 4 * 3)", 437),
+        official1_5: ("5 * 9 * (7 * 3 * 3 + 9 * 3 + (8 + 6 * 4))", 12240),
+        official1_6: ("((2 + 4 * 9) * (6 + 9 * 8 + 6) + 6) + 2 + 4 * 2", 13632),
+    }
+
+    expr_tests! {
+        official2_1: ("1 + 2 * 3 + 4 * 5 + 6", 231),
+        official2_2: ("1 + (2 * 3) + (4 * (5 + 6))", 51),
+        official2_3: ("2 * 3 + (4 * 5)", 46),
+        official2_4: ("5 + (8 * 3 + 9 + 3 * 4 * 3)", 1445),
+        official2_5: ("5 * 9 * (7 * 3 * 3 + 9 * 3 + (8 + 6 * 4))", 669060),
+        official2_6: ("((2 + 4 * 9) * (6 + 9 * 8 + 6) + 6) + 2 + 4 * 2", 23340),
     }
 }
 
