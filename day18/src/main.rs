@@ -20,32 +20,12 @@ fn parse_operator(input: &str) -> Option<Operator> {
         _ => None,
     }
 }
-pub trait Evaluator: CloneEvaluator {
+pub trait Evaluator {
     fn evaluate1(&self) -> u64;
     fn evaluate2(&self) -> u64;
     fn display(&self) -> String;
 }
 
-pub trait CloneEvaluator {
-    fn clone_evaluator(&self) -> Box<dyn Evaluator>;
-}
-
-impl<T> CloneEvaluator for T
-where
-    T: Evaluator + Clone + 'static,
-{
-    fn clone_evaluator(&self) -> Box<dyn Evaluator> {
-        Box::new(self.clone())
-    }
-}
-
-impl Clone for Box<dyn Evaluator> {
-    fn clone(&self) -> Self {
-        self.clone_evaluator()
-    }
-}
-
-#[derive(Clone, Copy)]
 struct Value {
     value: u64,
 }
@@ -64,7 +44,6 @@ impl Evaluator for Value {
     }
 }
 
-#[derive(Clone)]
 pub struct Expression {
     operators: Vec<Operator>,
     operands: Vec<Box<dyn Evaluator>>,
@@ -92,15 +71,17 @@ impl Evaluator for Expression {
         if self.operators.is_empty() {
             self.operands[0].evaluate2()
         } else {
-            // remove all additions then use evaluate1
+            // compute all additions and keep other operators...
             let mut operators = vec![];
-            let mut operands = vec![self.operands[0].clone()];
+            let mut operands = vec![Box::new(Value {
+                value: self.operands[0].evaluate2(),
+            })];
 
             for (i, &op) in self.operators.iter().enumerate() {
                 if op == ADD {
                     let operand = operands.pop().unwrap();
                     operands.push(Box::new(Value {
-                        value: operand.evaluate2() + self.operands[i + 1].evaluate2(),
+                        value: op(operand.evaluate2(), self.operands[i + 1].evaluate2()), // addition
                     }));
                 } else {
                     operators.push(op);
@@ -110,11 +91,17 @@ impl Evaluator for Expression {
                 }
             }
 
-            Self {
-                operators,
-                operands,
+            // ...then apply same logic as evaluate1
+            if operators.is_empty() {
+                operands[0].evaluate2()
+            } else {
+                operators
+                    .iter()
+                    .enumerate()
+                    .fold(operands[0].evaluate2(), |acc, (i, f)| {
+                        f(acc, operands[i + 1].evaluate2())
+                    })
             }
-            .evaluate1()
         }
     }
 
@@ -338,9 +325,11 @@ mod tests {
 fn main() {
     let input = get_input();
     let exps = input.iter().map(|&s| Expression::parse(s));
+
     // for (&str, exp) in input.iter().zip(exps.clone()) {
     //     println!("Part 1: {}  =  {}", exp.evaluate1(), str);
     // }
+
     let sum1: u64 = exps.clone().map(|e| e.evaluate1()).sum();
     println!("Part 1: sum is {} .", sum1);
 
