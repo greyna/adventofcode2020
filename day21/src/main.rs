@@ -19,13 +19,11 @@ struct PossibleIngredientAllergens(HashMap<Ingredient, HashSet<Allergen>>);
 impl PossibleIngredientAllergens {
     fn compute(input: &ParseResult) -> Self {
         // all allergens are possible by default
-        let mut possible_allergens = HashMap::from(
-            input
-                .ingredients
-                .iter()
-                .map(|&i| (i, input.allergens.clone()))
-                .collect(),
-        );
+        let mut possible_allergens: HashMap<_, _> = input
+            .ingredients
+            .iter()
+            .map(|&i| (i, input.allergens.clone()))
+            .collect();
 
         for food in &input.foods {
             let ingredients_not_in_food = food.ingredients.difference(&input.ingredients);
@@ -34,8 +32,8 @@ impl PossibleIngredientAllergens {
                     ing,
                     possible_allergens[ing]
                         .iter()
-                        .filter(|&a| !food.guaranteed_allergens.contains(a))
-                        .map(|s| *s)
+                        .filter(|&&a| !food.guaranteed_allergens.contains(a))
+                        .copied()
                         .collect(),
                 );
             }
@@ -52,7 +50,7 @@ impl PossibleIngredientAllergens {
     }
 }
 
-pub fn parse(input: &Vec<&'static str>) -> ParseResult {
+pub fn parse(input: &[&'static str]) -> ParseResult {
     let mut ingredients = HashSet::new();
     let mut allergens = HashSet::new();
     let mut foods = Vec::new();
