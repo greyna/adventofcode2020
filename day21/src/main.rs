@@ -10,17 +10,56 @@ pub struct Food {
 }
 
 #[derive(Debug)]
-pub struct ParseResult {
+pub struct ProblemInput {
     ingredients: HashSet<Ingredient>,
     allergens: HashSet<Allergen>,
     foods: Vec<Food>,
+}
+
+impl ProblemInput {
+    pub fn parse(input: &[&'static str]) -> Self {
+        let mut ingredients = HashSet::new();
+        let mut allergens = HashSet::new();
+        let mut foods = Vec::new();
+
+        for &line in input {
+            let mut split = line.split(" (contains ");
+            let food_ingredients: HashSet<Ingredient> = split.next().unwrap().split(' ').collect();
+            let food_allergens: HashSet<Allergen> = split
+                .next()
+                .map_or(HashSet::new(), |s| s[..s.len() - 1].split(", ").collect());
+
+            ingredients.extend(food_ingredients.iter());
+            allergens.extend(food_allergens.iter());
+            foods.push(Food {
+                ingredients: food_ingredients,
+                guaranteed_allergens: food_allergens,
+            });
+        }
+
+        Self {
+            ingredients,
+            allergens,
+            foods,
+        }
+    }
+
+    pub fn count_ingredients_occurences_in_foods(
+        &self,
+        ingredients: &HashSet<Ingredient>,
+    ) -> usize {
+        self.foods
+            .iter()
+            .map(|food| food.ingredients.intersection(ingredients).count())
+            .sum()
+    }
 }
 
 #[derive(Debug)]
 struct PossibleIngredientAllergens(HashMap<Ingredient, HashSet<Allergen>>);
 
 impl PossibleIngredientAllergens {
-    fn compute(input: &ParseResult) -> Self {
+    fn compute(input: &ProblemInput) -> Self {
         // all allergens are possible by default
         let mut possible_allergens: HashMap<_, _> = input
             .ingredients
@@ -29,7 +68,7 @@ impl PossibleIngredientAllergens {
             .collect();
 
         for food in &input.foods {
-            let ingredients_not_in_food = food.ingredients.difference(&input.ingredients);
+            let ingredients_not_in_food = input.ingredients.difference(&food.ingredients);
             for &ing in ingredients_not_in_food {
                 possible_allergens.insert(
                     ing,
@@ -45,48 +84,24 @@ impl PossibleIngredientAllergens {
         PossibleIngredientAllergens(possible_allergens)
     }
 
-    fn count_ingredients_without_any_allergens(&self) -> usize {
+    fn ingredients_without_any_allergens(&self) -> HashSet<Ingredient> {
         self.0
             .iter()
             .filter(|(_, allergens)| allergens.is_empty())
-            .count()
-    }
-}
-
-pub fn parse(input: &[&'static str]) -> ParseResult {
-    let mut ingredients = HashSet::new();
-    let mut allergens = HashSet::new();
-    let mut foods = Vec::new();
-
-    for &line in input {
-        let mut split = line.split(" (contains ");
-        let food_ingredients: HashSet<Ingredient> = split.next().unwrap().split(' ').collect();
-        let food_allergens: HashSet<Allergen> = split
-            .next()
-            .map_or(HashSet::new(), |s| s[..s.len() - 1].split(", ").collect());
-
-        ingredients.extend(food_ingredients.iter());
-        allergens.extend(food_allergens.iter());
-        foods.push(Food {
-            ingredients: food_ingredients,
-            guaranteed_allergens: food_allergens,
-        });
-    }
-
-    ParseResult {
-        ingredients,
-        allergens,
-        foods,
+            .map(|(ingredient, _)| ingredient)
+            .copied()
+            .collect()
     }
 }
 
 fn main() {
     let input = get_input();
-    let parse_result = parse(&input);
-    let possible_allergens = PossibleIngredientAllergens::compute(&parse_result);
+    let problem_input = ProblemInput::parse(&input);
+    let possible_allergens = PossibleIngredientAllergens::compute(&problem_input);
+    let ingredients_without_any_allergens = possible_allergens.ingredients_without_any_allergens();
     println!(
-        "solution is {}",
-        possible_allergens.count_ingredients_without_any_allergens()
+        "\nDay 21 part 1: there are {} occurences of ingredients not containing any allergen in all the foods ingredients lists.",
+        problem_input.count_ingredients_occurences_in_foods(&ingredients_without_any_allergens),
     );
 }
 
@@ -94,21 +109,14 @@ fn main() {
 mod tests {
     use super::*;
 
-    fn test_part1(input: &[&'static str], sol: usize) {
-        let parse_result = parse(input);
-        let possible_allergens = PossibleIngredientAllergens::compute(&parse_result);
-        //dbg!(parse_result.ingredients.iter().take(5).collect::<Vec<_>>());
-        //dbg!(parse_result.allergens.iter().take(5).collect::<Vec<_>>());
-        //dbg!(parse_result.foods.iter().take(2).collect::<Vec<_>>());
-        dbg!(possible_allergens.0.iter().take(3).collect::<Vec<_>>());
-        dbg!(possible_allergens
-            .0
-            .iter()
-            .map(|(_, set)| set.len())
-            .collect::<Vec<_>>());
+    fn test_part1(input: &[&'static str], expected: usize) {
+        let problem_input = ProblemInput::parse(input);
+        let possible_allergens = PossibleIngredientAllergens::compute(&problem_input);
+        let ingredients_without_any_allergens =
+            possible_allergens.ingredients_without_any_allergens();
         assert_eq!(
-            possible_allergens.count_ingredients_without_any_allergens(),
-            sol
+            problem_input.count_ingredients_occurences_in_foods(&ingredients_without_any_allergens),
+            expected
         );
     }
 
@@ -128,7 +136,7 @@ mod tests {
         simple1: (&["mxmxvkd kfcds sqjhc nhms (contains dairy, fish)",
         "trh fvjkl sbzzf mxmxvkd (contains dairy)",
         "sqjhc fvjkl (contains soy)",
-        "sqjhc mxmxvkd sbzzf (contains fish)",], 2),
+        "sqjhc mxmxvkd sbzzf (contains fish)",], 5),
     }
 }
 
