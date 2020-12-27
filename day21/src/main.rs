@@ -94,14 +94,63 @@ impl PossibleIngredientAllergens {
     }
 }
 
+#[derive(Debug)]
+struct AllergenIngredients(HashMap<Allergen, Ingredient>);
+
+impl AllergenIngredients {
+    pub fn compute(possibilities: &PossibleIngredientAllergens) -> Self {
+        let mut result: HashMap<Allergen, Ingredient> = HashMap::new();
+
+        let mut possibilities = possibilities.0.clone();
+        possibilities.retain(|_, allergens| !allergens.is_empty());
+
+        while !possibilities.is_empty() {
+            let certainties = possibilities
+                .iter()
+                .filter(|(_, allergens)| allergens.len() == 1)
+                .map(|(ing, allergen)| (*allergen.iter().next().unwrap(), *ing));
+
+            result.extend(certainties.clone());
+
+            let certainties: HashSet<Allergen> =
+                certainties.map(|(allergen, _)| allergen).collect();
+
+            for p in possibilities.values_mut() {
+                *p = p.difference(&certainties).copied().collect();
+            }
+
+            possibilities.retain(|_, allergens| !allergens.is_empty());
+        }
+
+        Self(result)
+    }
+
+    pub fn to_canonical_dangerous_ingredient_list_string(&self) -> String {
+        let mut sorted_vec = self.0.iter().collect::<Vec<_>>();
+        sorted_vec.sort_by_key(|(a, _)| *a);
+        sorted_vec
+            .iter()
+            .map(|(_, ing)| **ing)
+            .collect::<Vec<_>>()
+            .join(",")
+    }
+}
+
 fn main() {
     let input = get_input();
     let problem_input = ProblemInput::parse(&input);
     let possible_allergens = PossibleIngredientAllergens::compute(&problem_input);
+
     let ingredients_without_any_allergens = possible_allergens.ingredients_without_any_allergens();
     println!(
         "\nDay 21 part 1: there are {} occurences of ingredients not containing any allergen in all the foods ingredients lists.",
         problem_input.count_ingredients_occurences_in_foods(&ingredients_without_any_allergens),
+    );
+
+    let allergens_ingredient = AllergenIngredients::compute(&possible_allergens);
+    println!(
+        "\nDay 21 part 2: the canonical dangerous ingredient list is \n{}",
+        allergens_ingredient.to_canonical_dangerous_ingredient_list_string(),
     );
 }
 
@@ -109,34 +158,40 @@ fn main() {
 mod tests {
     use super::*;
 
-    fn test_part1(input: &[&'static str], expected: usize) {
+    fn test(input: &[&'static str], expected_part1: usize, expected_part2: &str) {
         let problem_input = ProblemInput::parse(input);
         let possible_allergens = PossibleIngredientAllergens::compute(&problem_input);
         let ingredients_without_any_allergens =
             possible_allergens.ingredients_without_any_allergens();
         assert_eq!(
             problem_input.count_ingredients_occurences_in_foods(&ingredients_without_any_allergens),
-            expected
+            expected_part1
+        );
+
+        let allergens_ingredient = AllergenIngredients::compute(&possible_allergens);
+        assert_eq!(
+            allergens_ingredient.to_canonical_dangerous_ingredient_list_string(),
+            expected_part2.to_string()
         );
     }
 
-    macro_rules! tests_part1 {
+    macro_rules! tests {
         ($($name:ident: $value:expr,)*) => {
         $(
             #[test]
             fn $name() {
-                let (input, expected) = $value;
-                test_part1(input, expected);
+                let (input, expected_part1, expected_part2) = $value;
+                test(input, expected_part1, expected_part2);
             }
         )*
         }
     }
 
-    tests_part1! {
+    tests! {
         simple1: (&["mxmxvkd kfcds sqjhc nhms (contains dairy, fish)",
         "trh fvjkl sbzzf mxmxvkd (contains dairy)",
         "sqjhc fvjkl (contains soy)",
-        "sqjhc mxmxvkd sbzzf (contains fish)",], 5),
+        "sqjhc mxmxvkd sbzzf (contains fish)",], 5, "mxmxvkd,sqjhc,fvjkl"),
     }
 }
 
